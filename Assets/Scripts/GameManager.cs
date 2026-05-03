@@ -2,7 +2,8 @@ using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 public class GameManager : MonoBehaviour
-{
+{   
+    public float currentRunCurrency = 0f;
     public float currency = 0f;
     public int currencyPerClick = 1;
     /// <summary>Manual clicks on the main cat button only (used for milestones).</summary>
@@ -10,6 +11,7 @@ public class GameManager : MonoBehaviour
     public int incomePerSecond = 0;
     public int autoClickerCount = 0;
     public float incomeMultiplier = 1f;
+    public float normalUpgradeCostMultiplier = 1f;
 
     // events to display respective stats after upgrade for that stat has been purchased
     public event Action AutoClickerPurchased;
@@ -30,5 +32,6 @@ public class GameManager : MonoBehaviour
     {
         currency += incomePerSecond * Time.deltaTime * incomeMultiplier;
         currency += autoClickerCount * currencyPerClick * Time.deltaTime * incomeMultiplier;
+        currentRunCurrency = Mathf.Max(currentRunCurrency, currency);
     }
 }

@@ -66,11 +66,12 @@ public class Clicker : MonoBehaviour,
     {
         gameManager.totalManualClicks++;
 
-        int gain = gameManager.currencyPerClick;
-        gameManager.currency += gain * gameManager.incomeMultiplier;
+        float gain = gameManager.currencyPerClick * gameManager.incomeMultiplier;
+        gameManager.currency += gain;
+        gameManager.currentRunCurrency += gain;
 
         if (showFloatGain)
-            SpawnFloatGain(gain);
+            SpawnFloatGain(Mathf.FloorToInt(gain));
 
         _usePointerSpawnForNextClick = false;
     }
@@ -93,6 +94,9 @@ public class Clicker : MonoBehaviour,
     // Apply visuals when the pointer is pressed
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (eventData.button != PointerEventData.InputButton.Left)
+            return;
+
         _pressed = true;
         _pointerDownScreen = eventData.position;
         _usePointerSpawnForNextClick = true;
@@ -102,6 +106,9 @@ public class Clicker : MonoBehaviour,
     // Apply visuals when the pointer is released
     public void OnPointerUp(PointerEventData eventData)
     {
+        if (eventData.button != PointerEventData.InputButton.Left)
+            return;
+
         _pressed = false;
         ApplyVisuals();
     }

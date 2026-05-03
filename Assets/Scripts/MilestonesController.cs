@@ -11,7 +11,6 @@ using UnityEngine.UI;
 public class MilestonesController : MonoBehaviour
 {
     const int MilestoneCount = 8;
-    const string PlayerPrefsMaskKey = "NeonPaws_MilestoneMask_v2";
 
     static readonly string[] kToastTitles =
     {
@@ -32,9 +31,6 @@ public class MilestonesController : MonoBehaviour
     [SerializeField] Color unlockedBoxColor = new Color(0.8f, 0.86f, 1f, 1f);
     [SerializeField] Color lockedBoxColor = new Color(0.72f, 0.74f, 0.78f, 1f);
 
-    [Tooltip("Deletes saved milestone unlocks from PlayerPrefs when the scene loads. Use while testing; turn off for a real playthrough / build.")]
-    [SerializeField] bool clearMilestoneSaveOnAwake;
-
     [Header("Bottom toast (optional)")]
     [Tooltip("Small panel at bottom of screen; inactive in scene until a milestone unlocks.")]
     [SerializeField] GameObject milestoneToastRoot;
@@ -49,6 +45,8 @@ public class MilestonesController : MonoBehaviour
     readonly Queue<int> _toastQueue = new Queue<int>();
     bool _toastRoutineRunning;
     bool _warnedToastHierarchy;
+    bool _initializedFromSave;
+    SaveManager _saveManager;
 
     void Awake()
     {
@@ -56,17 +54,32 @@ public class MilestonesController : MonoBehaviour
         if (gameManager == null)
             gameManager = FindObjectOfType<GameManager>();
 
-        // Clear the milestone save if the user wants to test
-        if (clearMilestoneSaveOnAwake)
+        _saveManager = FindObjectOfType<SaveManager>();
+
+        // Ensure the save manager is assigned
+        if (_saveManager != null)
         {
-            PlayerPrefs.DeleteKey(PlayerPrefsMaskKey);
-            PlayerPrefs.Save();
+            _saveManager.EnsureLoaded();
+
+            if (_saveManager.CurrentSave == null)
+            {
+                _savedMask = 0;
+                _initializedFromSave = false;
+            }
+            else
+            {
+                _savedMask = _saveManager.CurrentSave.milestonesMask & AllMilestoneBits;
+                _initializedFromSave = true;
+            }
+        }
+        else
+        {
+            // Fallback: if SaveManager isn't present yet, keep the old behavior visual-only.
+            _savedMask = 0;
+            _initializedFromSave = false;
         }
 
-        // Get the saved milestone mask
-        _savedMask = PlayerPrefs.GetInt(PlayerPrefsMaskKey, 0) & AllMilestoneBits;
-
-        // Disable the toast root and canvas group if they are assigned
+        // Disable the popup toast if it isn't assigned
         if (milestoneToastRoot != null)
             milestoneToastRoot.SetActive(false);
         if (milestoneToastCanvasGroup != null)
@@ -79,17 +92,27 @@ public class MilestonesController : MonoBehaviour
         if (gameManager == null)
             return;
 
+        // SaveManager may finish loading after this controller's Awake().
+        // Keep trying until we can sync the persisted milestone mask.
+        if (!_initializedFromSave && _saveManager != null && _saveManager.LoadOnAwakeEnabled)
+            TryInitializeSavedMask();
+
         // Compute the earned mask
         int earned = ComputeEarnedMask();
         int merged = (_savedMask | earned) & AllMilestoneBits;
         int newlyUnlocked = merged & ~_savedMask;
 
-        // If the merged mask is different from the saved mask, update the saved mask
+        // If the merged mask is different from the saved mask, update the save (sticky unlocks)
         if (merged != _savedMask)
         {
             _savedMask = merged;
-            PlayerPrefs.SetInt(PlayerPrefsMaskKey, _savedMask);
-            PlayerPrefs.Save();
+
+            SaveManager saveManager = FindObjectOfType<SaveManager>();
+            if (saveManager != null && saveManager.CurrentSave != null)
+            {
+                saveManager.CurrentSave.milestonesMask = _savedMask;
+                saveManager.SaveNow();
+            }
         }
 
         // If there are newly unlocked bits, enqueue the toasts
@@ -107,6 +130,18 @@ public class MilestonesController : MonoBehaviour
                 continue;
             img.color = (_savedMask & (1 << i)) != 0 ? unlockedBoxColor : lockedBoxColor;
         }
+    }
+
+    void TryInitializeSavedMask()
+    {
+        if (_saveManager == null)
+            _saveManager = FindObjectOfType<SaveManager>();
+
+        if (_saveManager == null || !_saveManager.LoadOnAwakeEnabled || _saveManager.CurrentSave == null)
+            return;
+
+        _savedMask = _saveManager.CurrentSave.milestonesMask & AllMilestoneBits;
+        _initializedFromSave = true;
     }
 
     void EnqueueToastsForNewBits(int newBits)
